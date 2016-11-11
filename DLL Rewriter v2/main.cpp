@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <fstream>
 
-#include <conio.h> // potrzebne do _getch()
 #include <Windows.h>
 
 #include "PElib.h"
@@ -118,11 +117,5 @@ int wmain(int argc, const wchar_t* argv[])
 
 	dll.Save(argv[1] + L".rebuilt.dll"s);
 	puts("Done!");
-
-#if defined(_MSC_VER) && defined(_DEBUG)
-	// Ułatwia testowanie pod Visual Studio
-	puts("[Press any key]");
-	_getch();
-#endif
 	return 0;
 }
