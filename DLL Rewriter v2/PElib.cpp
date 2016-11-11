@@ -88,7 +88,9 @@ void PE::Load(const void* pe_data)
 	// Nagłówek PE
 	auto header_size = sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader);
 	memcpy(&PE_header, mem_it, header_size);
-	memcpy(&PE_header.OptionalHeader, mem_it + header_size, PE_header.FileHeader.SizeOfOptionalHeader);
+	memcpy(&PE_header.OptionalHeader, 
+		   mem_it + header_size,
+		   PE_header.FileHeader.SizeOfOptionalHeader);
 	mem_it += header_size + PE_header.FileHeader.SizeOfOptionalHeader;
 
 	// Nagłówki sekcji
@@ -99,14 +101,17 @@ void PE::Load(const void* pe_data)
 	{
 		sections_hdrs.push_back(*(IMAGE_SECTION_HEADER*)mem_it);
 		char* ptr = new char[sections_hdrs.back().SizeOfRawData];
-		memcpy(ptr, mem_begin + sections_hdrs.back().PointerToRawData, sections_hdrs.back().SizeOfRawData);
+		memcpy(ptr,
+			   mem_begin + sections_hdrs.back().PointerToRawData,
+			   sections_hdrs.back().SizeOfRawData);
 		sections_data.push_back(ptr);
 		mem_it += sizeof(sections_hdrs[0]);
 	}
 	sections_loaded = true;
 }
 
-void PE::AddSection(const string& name, uint rva, uint vsize, const string& data, DWORD characteristics)
+void PE::AddSection(const string& name, uint rva, uint vsize, const string& data,
+					DWORD characteristics)
 {
 	IMAGE_SECTION_HEADER hdr;
 	memset(&hdr, 0, sizeof(hdr));
@@ -133,7 +138,8 @@ void PE::RemoveSection(int index)
 uint PE::NextFreeRVA() const
 {
 	return sections_hdrs.back().VirtualAddress +
-		align_up(sections_hdrs.back().Misc.VirtualSize, PE_header.OptionalHeader.SectionAlignment);
+		align_up(sections_hdrs.back().Misc.VirtualSize,
+				 PE_header.OptionalHeader.SectionAlignment);
 }
 
 const IMAGE_SECTION_HEADER& PE::SectionFromRVA(uint rva) const
@@ -198,14 +204,20 @@ void PE::Save(const std::wstring& file_path)
 	PE_header.OptionalHeader.FileAlignment = 0x200;
 	PE_header.OptionalHeader.SectionAlignment = 0x1000;
 	PE_header.OptionalHeader.NumberOfRvaAndSizes = IMAGE_NUMBEROF_DIRECTORY_ENTRIES;
-	PE_header.OptionalHeader.SizeOfImage = align_up(sections_hdrs.back().VirtualAddress + sections_hdrs.back().Misc.VirtualSize, PE_header.OptionalHeader.SectionAlignment);
-	PE_header.OptionalHeader.SizeOfHeaders = align_up(MZ_header.e_lfanew + sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader)
-	                                                  + PE_header.FileHeader.SizeOfOptionalHeader + sections_hdrs.size() * sizeof(sections_hdrs[0]), PE_header.OptionalHeader.FileAlignment);
+	PE_header.OptionalHeader.SizeOfImage =
+		align_up(sections_hdrs.back().VirtualAddress + sections_hdrs.back().Misc.VirtualSize,
+				 PE_header.OptionalHeader.SectionAlignment);
+	PE_header.OptionalHeader.SizeOfHeaders = 
+		align_up(MZ_header.e_lfanew + sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader)
+					+ PE_header.FileHeader.SizeOfOptionalHeader
+					+ sections_hdrs.size() * sizeof(sections_hdrs[0]),
+				 PE_header.OptionalHeader.FileAlignment);
 	uint file_pos = PE_header.OptionalHeader.SizeOfHeaders;
 	for (auto& header : sections_hdrs)
 	{
 		header.PointerToRawData = file_pos;
-		file_pos = align_up(file_pos + header.SizeOfRawData, PE_header.OptionalHeader.FileAlignment);
+		file_pos = align_up(file_pos + header.SizeOfRawData,
+							PE_header.OptionalHeader.FileAlignment);
 	}
 
 	// Zbuduj nowy plik PE w pamięci
@@ -259,8 +271,11 @@ void* PE::Convert(void* addr, ADDR_TYPE from, ADDR_TYPE to) const
 	{
 		int i;
 		for (i = 0; i < sections_hdrs.size(); i++)
-			if ((char*)sections_hdrs[i].PointerToRawData <= _addr && _addr < (char*)sections_hdrs[i].PointerToRawData + sections_hdrs[i].SizeOfRawData)
+			if ((char*)sections_hdrs[i].PointerToRawData <= _addr &&
+				_addr < (char*)sections_hdrs[i].PointerToRawData + sections_hdrs[i].SizeOfRawData)
+			{
 				break;
+			}
 		if (i == sections_hdrs.size())
 			fatal_error("Bad argument passed to " __FUNCTION__ "! (FILE_OFFSET=%08x)", _addr);
 		_addr += sections_hdrs[i].VirtualAddress - sections_hdrs[i].PointerToRawData;
@@ -269,8 +284,11 @@ void* PE::Convert(void* addr, ADDR_TYPE from, ADDR_TYPE to) const
 	{
 		int i;
 		for (i = 0; i < sections_data.size(); i++)
-			if (sections_data[i] <= _addr && _addr < sections_data[i] + sections_hdrs[i].SizeOfRawData)
+			if (sections_data[i] <= _addr
+				&& _addr < sections_data[i] + sections_hdrs[i].SizeOfRawData)
+			{
 				break;
+			}
 		if (i == sections_hdrs.size())
 			fatal_error("Bad argument passed to " __FUNCTION__ "! (PTR=%08x)", _addr);
 		_addr += (char*)sections_hdrs[i].VirtualAddress - (decltype(_addr))sections_data[i];
@@ -285,8 +303,11 @@ void* PE::Convert(void* addr, ADDR_TYPE from, ADDR_TYPE to) const
 	{
 		int i;
 		for (i = 0; i < sections_hdrs.size(); i++)
-			if ((char*)sections_hdrs[i].VirtualAddress <= _addr && _addr < (char*)sections_hdrs[i].VirtualAddress + sections_hdrs[i].Misc.VirtualSize)
+			if ((char*)sections_hdrs[i].VirtualAddress <= _addr
+				&& _addr < (char*)sections_hdrs[i].VirtualAddress + sections_hdrs[i].Misc.VirtualSize)
+			{
 				break;
+			}
 		if (i == sections_hdrs.size())
 			fatal_error("Bad argument passed to " __FUNCTION__ "! (RVA=%08x)", _addr);
 		if (to == ADDR_TYPE::FILE_OFFSET)
