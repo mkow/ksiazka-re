@@ -27,11 +27,24 @@
 *.exe
 *.out
 *.app
-/DLL Rewriter v1/.vs/DLL Rewriter v1/v14
+
+# Generated files
+*.map
+*.bin
+
+# Visual Studio files
+*.db
+*.opendb
+
+*.bat
+/DLL Rewriter v1/.vs/
 /DLL Rewriter v1/Debug
 /DLL Rewriter v1/Release
-/DLL Rewriter v1/DLL Rewriter v1.VC.db
-/DLL Rewriter v1/DLL Rewriter v1.VC.VC.opendb
-/DLL Rewriter v1/__tmp_generated.map
-/DLL Rewriter v1/__tmp_generated.bin
+/DLL Rewriter v1/x64
 /DLL Rewriter v1/__tmp_generated.asm
+/DLL Rewriter v2/.vs/
+/DLL Rewriter v2/Debug
+/DLL Rewriter v2/Release
+/DLL Rewriter v2/x64
+/DLL Rewriter v2/__tmp_generated.asm
+
