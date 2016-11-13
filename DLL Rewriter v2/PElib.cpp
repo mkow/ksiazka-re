@@ -12,6 +12,9 @@ using std::string;
 using std::wstring;
 using std::vector;
 
+namespace PElib
+{
+
 uint PE::Checksum(const string& data)
 {
 	uint res = 0;
@@ -88,7 +91,7 @@ void PE::Load(const void* pe_data)
 	// Nagłówek PE
 	auto header_size = sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader);
 	memcpy(&PE_header, mem_it, header_size);
-	memcpy(&PE_header.OptionalHeader, 
+	memcpy(&PE_header.OptionalHeader,
 		   mem_it + header_size,
 		   PE_header.FileHeader.SizeOfOptionalHeader);
 	mem_it += header_size + PE_header.FileHeader.SizeOfOptionalHeader;
@@ -96,7 +99,7 @@ void PE::Load(const void* pe_data)
 	// Nagłówki sekcji
 	if (PE_header.OptionalHeader.NumberOfRvaAndSizes > IMAGE_NUMBEROF_DIRECTORY_ENTRIES)
 		fatal_error("Bad value of field PE.OptionalHeader.NumberOfRvaAndSizes: %d",
-		            PE_header.OptionalHeader.NumberOfRvaAndSizes);
+					PE_header.OptionalHeader.NumberOfRvaAndSizes);
 	for (int i = 0; i < PE_header.FileHeader.NumberOfSections; i++)
 	{
 		sections_hdrs.push_back(*(IMAGE_SECTION_HEADER*)mem_it);
@@ -110,14 +113,14 @@ void PE::Load(const void* pe_data)
 	sections_loaded = true;
 }
 
-void PE::AddSection(const string& name, uint rva, uint vsize, const string& data,
+void PE::AddSection(const string& name, RVA rva, uint vsize, const string& data,
 					DWORD characteristics)
 {
 	IMAGE_SECTION_HEADER hdr;
 	memset(&hdr, 0, sizeof(hdr));
 	memcpy(hdr.Name, name.c_str(), min(sizeof(hdr.Name), name.size()));
 	hdr.Characteristics = characteristics;
-	hdr.VirtualAddress = rva;
+	hdr.VirtualAddress = rva.val;
 	hdr.Misc.VirtualSize = vsize;
 	hdr.SizeOfRawData = data.size();
 	sections_hdrs.push_back(hdr);
@@ -135,19 +138,22 @@ void PE::RemoveSection(int index)
 	PE_header.FileHeader.NumberOfSections--;
 }
 
-uint PE::NextFreeRVA() const
+RVA PE::NextFreeRVA() const
 {
-	return sections_hdrs.back().VirtualAddress +
+	return RVA{ sections_hdrs.back().VirtualAddress +
 		align_up(sections_hdrs.back().Misc.VirtualSize,
-				 PE_header.OptionalHeader.SectionAlignment);
+				 PE_header.OptionalHeader.SectionAlignment) };
 }
 
-const IMAGE_SECTION_HEADER& PE::SectionFromRVA(uint rva) const
+const IMAGE_SECTION_HEADER& PE::SectionFromRVA(RVA rva) const
 {
 	for (auto& header : sections_hdrs)
-		if (header.VirtualAddress <= rva && rva < header.VirtualAddress + header.Misc.VirtualSize)
+		if (header.VirtualAddress <= rva.val
+			&& rva.val < header.VirtualAddress + header.Misc.VirtualSize)
+		{
 			return header;
-	fatal_error("Bad argument passed to " __FUNCTION__ "! (rva=%08x)", rva);
+		}
+	fatal_error("Bad argument passed to " __FUNCTION__ "! (RVA=%08x)", rva);
 }
 
 const IMAGE_DATA_DIRECTORY& PE::Directory(uint index) const
@@ -177,19 +183,19 @@ const IMAGE_OPTIONAL_HEADER& PE::OptionalHeader() const
 	return PE_header.OptionalHeader;
 }
 
-bool PE::IsAddrReadable(uint rva) const
+bool PE::IsAddrReadable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
 	return section.Characteristics & IMAGE_SCN_MEM_READ;
 }
 
-bool PE::IsAddrWritable(uint rva) const
+bool PE::IsAddrWritable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
 	return section.Characteristics & IMAGE_SCN_MEM_WRITE;
 }
 
-bool PE::IsAddrExecutable(uint rva) const
+bool PE::IsAddrExecutable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
 	return section.Characteristics & IMAGE_SCN_MEM_EXECUTE;
@@ -207,10 +213,10 @@ void PE::Save(const std::wstring& file_path)
 	PE_header.OptionalHeader.SizeOfImage =
 		align_up(sections_hdrs.back().VirtualAddress + sections_hdrs.back().Misc.VirtualSize,
 				 PE_header.OptionalHeader.SectionAlignment);
-	PE_header.OptionalHeader.SizeOfHeaders = 
+	PE_header.OptionalHeader.SizeOfHeaders =
 		align_up(MZ_header.e_lfanew + sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader)
-					+ PE_header.FileHeader.SizeOfOptionalHeader
-					+ sections_hdrs.size() * sizeof(sections_hdrs[0]),
+				 + PE_header.FileHeader.SizeOfOptionalHeader
+				 + sections_hdrs.size() * sizeof(sections_hdrs[0]),
 				 PE_header.OptionalHeader.FileAlignment);
 	uint file_pos = PE_header.OptionalHeader.SizeOfHeaders;
 	for (auto& header : sections_hdrs)
@@ -258,61 +264,4 @@ void PE::Save(const std::wstring& file_path)
 	f.close();
 }
 
-void* PE::Convert(void* addr, ADDR_TYPE from, ADDR_TYPE to) const
-{
-	if (!sections_loaded)
-		fatal_error("Bad use of " __FUNCTION__ "! Used before loading PE sections");
-	char* _addr = (char*)addr;
-
-	// `from` -> RVA
-	if (from == ADDR_TYPE::VA)
-		_addr -= PE_header.OptionalHeader.ImageBase;
-	else if (from == ADDR_TYPE::FILE_OFFSET)
-	{
-		int i;
-		for (i = 0; i < sections_hdrs.size(); i++)
-			if ((char*)sections_hdrs[i].PointerToRawData <= _addr &&
-				_addr < (char*)sections_hdrs[i].PointerToRawData + sections_hdrs[i].SizeOfRawData)
-			{
-				break;
-			}
-		if (i == sections_hdrs.size())
-			fatal_error("Bad argument passed to " __FUNCTION__ "! (FILE_OFFSET=%08x)", _addr);
-		_addr += sections_hdrs[i].VirtualAddress - sections_hdrs[i].PointerToRawData;
-	}
-	else if (from == ADDR_TYPE::PTR)
-	{
-		int i;
-		for (i = 0; i < sections_data.size(); i++)
-			if (sections_data[i] <= _addr
-				&& _addr < sections_data[i] + sections_hdrs[i].SizeOfRawData)
-			{
-				break;
-			}
-		if (i == sections_hdrs.size())
-			fatal_error("Bad argument passed to " __FUNCTION__ "! (PTR=%08x)", _addr);
-		_addr += (char*)sections_hdrs[i].VirtualAddress - (decltype(_addr))sections_data[i];
-	}
-
-	// RVA -> `to`
-	if (to == ADDR_TYPE::RVA)
-		return _addr;
-	else if (to == ADDR_TYPE::VA)
-		return _addr + PE_header.OptionalHeader.ImageBase;
-	else if (to == ADDR_TYPE::FILE_OFFSET || to == ADDR_TYPE::PTR)
-	{
-		int i;
-		for (i = 0; i < sections_hdrs.size(); i++)
-			if ((char*)sections_hdrs[i].VirtualAddress <= _addr
-				&& _addr < (char*)sections_hdrs[i].VirtualAddress + sections_hdrs[i].Misc.VirtualSize)
-			{
-				break;
-			}
-		if (i == sections_hdrs.size())
-			fatal_error("Bad argument passed to " __FUNCTION__ "! (RVA=%08x)", _addr);
-		if (to == ADDR_TYPE::FILE_OFFSET)
-			return _addr - sections_hdrs[i].VirtualAddress + sections_hdrs[i].PointerToRawData;
-		if (to == ADDR_TYPE::PTR)
-			return (ull)_addr - sections_hdrs[i].VirtualAddress + (decltype(_addr))sections_data[i];
-	}
 }

@@ -12,12 +12,18 @@ using std::ofstream;
 using std::string;
 using std::wstring;
 
+using PElib::PE;
+using PElib::RVA;
+using PElib::VA;
+using PElib::FILE_OFFSET;
+using PElib::PTR;
+
 using namespace std::string_literals;
 
-bool is_export_forwarded(const IMAGE_DATA_DIRECTORY& exports_dir, uint exported_rva)
+bool is_export_forwarded(const IMAGE_DATA_DIRECTORY& exports_dir, RVA exported_rva)
 {
-	return exports_dir.VirtualAddress <= exported_rva
-		&& exported_rva < exports_dir.VirtualAddress + exports_dir.Size;
+	return exports_dir.VirtualAddress <= exported_rva.val
+		&& exported_rva.val < exports_dir.VirtualAddress + exports_dir.Size;
 }
 
 int wmain(int argc, const wchar_t* argv[])
@@ -29,7 +35,6 @@ int wmain(int argc, const wchar_t* argv[])
 
 	PE dll(argv[1]);
 	wstring asm_path = argv[2];
-
 	// Znajdź wolne RVA dla nowej sekcji
 	auto free_rva = dll.NextFreeRVA();
 
@@ -51,23 +56,21 @@ int wmain(int argc, const wchar_t* argv[])
 	else
 	{
 		// Załaduj strukturę IMAGE_EXPORT_DIRECTORY z danych w pamięci
-		auto rva = exports_dir_entry.VirtualAddress;
+		auto rva = RVA{ exports_dir_entry.VirtualAddress };
 		auto section = dll.SectionFromRVA(rva);
 		auto size = sizeof(export_directory);
-		if (section.SizeOfRawData - (rva - section.VirtualAddress) < size)
+		if (section.SizeOfRawData - (rva.val - section.VirtualAddress) < size)
 		{
 			// Tabela eksportów przekracza granicę sekcji lub danych
 			// załadowanych z pliku, dla uproszczenia pomijamy ten przypadek
 			fatal_error("Unsupported export table location");
 		}
-		auto export_table_ptr = dll.Convert((void*)rva, ADDR_TYPE::RVA, ADDR_TYPE::PTR);
+		auto export_table_ptr = dll.ConvertTo<PTR>(rva).val;
 		memcpy(&export_directory, export_table_ptr, size);
 	}
 
 	// Znajdź listę adresów eksportowanych symboli
-	auto exported_functions = (uint*)dll.Convert((void*)export_directory.AddressOfFunctions,
-												 ADDR_TYPE::RVA,
-												 ADDR_TYPE::PTR);
+	auto exported_functions = (uint*)dll.ConvertTo<PTR>(RVA{ export_directory.AddressOfFunctions }).val;
 
 	// Wygeneruj kod asemblera zawierający wrappery na eksportowane
 	// funkcje
@@ -83,7 +86,7 @@ int wmain(int argc, const wchar_t* argv[])
 	// z odpowiednimi parametrami (jej adres oraz indeks)
 	for (DWORD i = 0; i < export_directory.NumberOfFunctions; i++)
 	{
-		auto func_addr = exported_functions[i];
+		auto func_addr = RVA{ exported_functions[i] };
 		if (dll.IsAddrExecutable(func_addr) && !is_export_forwarded(exports_dir_entry, func_addr))
 			gen_file << format("redirect 0%08xh, %d\n", func_addr, i);
 	}
@@ -110,9 +113,9 @@ int wmain(int argc, const wchar_t* argv[])
 	map<string, uint> labels = parse_map_file(generated_prefix + ".map");
 	for (int i = 0; i < export_directory.NumberOfFunctions; i++)
 	{
-		auto& func_addr = exported_functions[i];
+		auto func_addr = RVA{ exported_functions[i] };
 		if (dll.IsAddrExecutable(func_addr) && !is_export_forwarded(exports_dir_entry, func_addr))
-			func_addr = labels[format("entry_%d", i)];
+			exported_functions[i] = labels[format("entry_%d", i)];
 	}
 
 	dll.Save(argv[1] + L".rebuilt.dll"s);
