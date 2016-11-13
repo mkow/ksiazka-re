@@ -43,6 +43,8 @@ string read_whole_file(const string& path)
 string read_whole_file(const wstring& path)
 {
 	ifstream file(path, ios::binary);
+	if (file.fail())
+		fatal_error("Cannot open file: %ls", path.c_str());
 	file.seekg(0, ios::end);
 	auto size = file.tellg();
 	file.seekg(0);
@@ -50,6 +52,8 @@ string read_whole_file(const wstring& path)
 	string buffer;
 	buffer.resize(size);
 	file.read(&buffer[0], size);
+	if (file.fail())
+		fatal_error("Cannot read file: %ls", path.c_str());
 	return buffer;
 }
 
