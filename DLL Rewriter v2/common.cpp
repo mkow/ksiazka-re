@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <string>
@@ -11,10 +12,15 @@
 #include <conio.h> // for _getch()
 #include <Windows.h>
 
+#ifdef max // garbage from Windows.h
+#undef max
+#endif
+
 using std::hex;
 using std::ifstream;
 using std::ios;
 using std::map;
+using std::numeric_limits;
 using std::string;
 using std::wstring;
 
@@ -50,7 +56,11 @@ string read_whole_file(const wstring& path)
 	file.seekg(0);
 
 	string buffer;
-	buffer.resize(size);
+	if (size > numeric_limits<size_t>::max())
+		// We have to check this, otherwise buffer.resize() would trim
+		// the value, but file.read wouldn't.
+		fatal_error("File too big to load to memory: %ls", path.c_str());
+	buffer.resize((size_t)size);
 	file.read(&buffer[0], size);
 	if (file.fail())
 		fatal_error("Cannot read file: %ls", path.c_str());

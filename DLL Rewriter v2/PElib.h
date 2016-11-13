@@ -93,7 +93,7 @@ template<> inline RVA PE::ConvertTo<RVA, FILE_OFFSET>(FILE_OFFSET from)
 
 template<> inline RVA PE::ConvertTo<RVA, PTR>(PTR from)
 {
-	for (int i = 0; i < sections_data.size(); i++)
+	for (size_t i = 0; i < sections_data.size(); i++)
 		if (sections_data[i] <= from.val
 			&& from.val < sections_data[i] + sections_hdrs[i].SizeOfRawData)
 		{
@@ -126,7 +126,7 @@ template<> inline FILE_OFFSET PE::ConvertTo<FILE_OFFSET, RVA>(RVA from)
 
 template<> inline PTR PE::ConvertTo<PTR, RVA>(RVA from)
 {
-	for (int i = 0; i < sections_hdrs.size(); i++)
+	for (size_t i = 0; i < sections_hdrs.size(); i++)
 		if (sections_hdrs[i].VirtualAddress <= from.val
 			&& from.val < sections_hdrs[i].VirtualAddress + sections_hdrs[i].Misc.VirtualSize)
 		{

@@ -1,10 +1,16 @@
 #include "PElib.h"
 
 #include <fstream>
+#include <limits>
 
 #include "common.h"
 
+#ifdef max // garbage from Windows.h
+#undef max
+#endif
+
 using std::ios;
+using std::numeric_limits;
 using std::map;
 using std::ifstream;
 using std::ofstream;
@@ -53,7 +59,7 @@ PE::PE(const wstring& file_path)
 
 PE::~PE()
 {
-	for (int i = 0; i < sections_data.size(); i++)
+	for (size_t i = 0; i < sections_data.size(); i++)
 		delete[] sections_data[i];
 }
 
@@ -186,26 +192,28 @@ const IMAGE_OPTIONAL_HEADER& PE::OptionalHeader() const
 bool PE::IsAddrReadable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
-	return section.Characteristics & IMAGE_SCN_MEM_READ;
+	return (section.Characteristics & IMAGE_SCN_MEM_READ) != 0;
 }
 
 bool PE::IsAddrWritable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
-	return section.Characteristics & IMAGE_SCN_MEM_WRITE;
+	return (section.Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
 }
 
 bool PE::IsAddrExecutable(RVA rva) const
 {
 	const auto& section = SectionFromRVA(rva);
-	return section.Characteristics & IMAGE_SCN_MEM_EXECUTE;
+	return (section.Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
 }
 
 void PE::Save(const std::wstring& file_path)
 {
 	// Fix pointers
 	MZ_header.e_lfanew = sizeof(MZ_header) + dos_stub_size;
-	PE_header.FileHeader.NumberOfSections = sections_hdrs.size();
+	if (sections_hdrs.size() > numeric_limits<WORD>::max())
+		fatal_error("Too many sections! (%zd)", sections_hdrs.size());
+	PE_header.FileHeader.NumberOfSections = (WORD)sections_hdrs.size();
 	PE_header.FileHeader.SizeOfOptionalHeader = sizeof(PE_header.OptionalHeader);
 	PE_header.OptionalHeader.FileAlignment = 0x200;
 	PE_header.OptionalHeader.SectionAlignment = 0x1000;
@@ -240,7 +248,7 @@ void PE::Save(const std::wstring& file_path)
 	uint pos = res.size();
 	char* nullmem = new char[PE_header.OptionalHeader.FileAlignment];
 	memset(nullmem, 0, PE_header.OptionalHeader.FileAlignment);
-	for (int i = 0; i < sections_hdrs.size(); i++)
+	for (size_t i = 0; i < sections_hdrs.size(); i++)
 	{
 		auto aligned = align_up(pos, PE_header.OptionalHeader.FileAlignment);
 		res.append(nullmem, aligned - pos);

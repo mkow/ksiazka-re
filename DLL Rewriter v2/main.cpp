@@ -108,7 +108,7 @@ int wmain(int argc, const wchar_t* argv[])
 
 	// Change function pointers in export table so they point to generated wrappers.
 	map<string, uint> labels = parse_map_file(generated_prefix + ".map");
-	for (int i = 0; i < export_directory.NumberOfFunctions; i++)
+	for (DWORD i = 0; i < export_directory.NumberOfFunctions; i++)
 	{
 		auto func_addr = RVA{ exported_functions[i] };
 		if (dll.IsAddrExecutable(func_addr) && !is_export_forwarded(exports_dir_entry, func_addr))
