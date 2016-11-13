@@ -1,20 +1,17 @@
-; Położenie tego kodu zostanie ustawione na RVA pamięci, w której
-; docelowo ma się on znaleźć (za pomocą dyrektywy ORG asemblera nasm).
-__begin_marker: ; Etykieta używana przez nasz parser plików .map
+; Placement of this code will be set to RVA (not VA!) of destination memory
+; (using ORG directive).
+__begin_marker: ; Used by our .map parser
 
-%macro redirect 2 ; Argumenty: adres funkcji (RVA), indeks
+%macro redirect 2 ; Args: func address (RVA), func index
 	longjmp_%2:
-		jmp %1 ; Skok do oryginalnej funkcji. Ponieważ jmp jest skokiem
-		       ; względnym, nie musimy przejmować się, gdzie biblioteka
-		       ; zostanie załadowana do pamięci (czyli znać docelowego VA)
-	times 5 nop    ; umożliwia hot-patching
-	align 16, nop  ; wyrównanie adresu wpisu do 16 bajtów
-	entry_%2: ; Etykieta entry_<indeks> zostanie użyta jako
-	          ; nowy adres funkcji o tym indeksie
-		jmp short longjmp_%2 ; Pierwsza instrukcja musi zajmować
-		                     ; przynajmniej 2 bajty (hot-patching
-		                     ; tego wymaga)
-	; Alternatywna wersja:
+		jmp %1 ; Jump to original function. 'jmp' is relative so we don't
+		       ; have to know target VA (relative distance is enough).
+	times 5 nop    ; Allows hot-patching.
+	align 16, nop  ; Alignment to 16
+	entry_%2: ; entry_<index> label will be pointed by an exported symbol with this index
+		jmp short longjmp_%2 ; First instruction must be at least 2-bytes long
+		                     ; for hot-patching support.
+	; Alternative version:
 	;je %1
 	;jne %1
 %endmacro

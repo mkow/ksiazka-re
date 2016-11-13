@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include <conio.h> // potrzebne do _getch()
+#include <conio.h> // for _getch()
 #include <Windows.h>
 
 using std::hex;
@@ -71,8 +71,8 @@ map<string, uint> parse_map_file(wstring map_file_path)
 			after_marker = true;
 		if (after_marker)
 		{
-			// Sparsuj aktualną linię
-			// Przykład formatu: "           FA000             FA000  longjmp_0"
+			// Parse current line.
+			// Format example: "           FA000             FA000  longjmp_0"
 			std::stringstream stream(line);
 			uint unused;
 			uint rva;

@@ -12,9 +12,6 @@ This library provides `PE` class which allows simple operations on 32-bit PE fil
 
 #include "common.h"
 
-// Typy adresów:
-enum class ADDR_TYPE { RVA, VA, FILE_OFFSET, PTR };
-
 namespace PElib
 {
 

@@ -18,8 +18,8 @@ namespace PElib
 uint PE::Checksum(const string& data)
 {
 	uint res = 0;
-	// Nie musimy martwić się o dane o nieparzystej długości, ponieważ
-	// std::string::c_str zwraca dane z dodanym na końcu bajtem '\0'
+	// We don't have to care about odd-length data, because
+	// std::string::c_str returns data ending with a '\0'.
 	for (string::size_type i = 0; i * 2 < data.size(); i++)
 	{
 		res += ((const ushort*)data.c_str())[i];
@@ -77,9 +77,9 @@ void PE::Load(const void* pe_data)
 	const char* mem_begin = (const char*)pe_data;
 	const char* mem_it = mem_begin;
 
-	// Nagłówek MZ
+	// MZ header
 	memcpy(&MZ_header, mem_it, sizeof(MZ_header));
-	// Ładujemy DOS stub, zakładając że mieści się pomiędzy nagłówkiem MZ i e_lfanew
+	// Load DOS stub, verifying that it fits between MZ header end and data pointed by e_lfanew
 	if (MZ_header.e_lfanew - sizeof(MZ_header) > 0)
 	{
 		dos_stub_size = MZ_header.e_lfanew - sizeof(MZ_header);
@@ -88,7 +88,7 @@ void PE::Load(const void* pe_data)
 	}
 	mem_it += MZ_header.e_lfanew;
 
-	// Nagłówek PE
+	// PE header
 	auto header_size = sizeof(PE_header.Signature) + sizeof(PE_header.FileHeader);
 	memcpy(&PE_header, mem_it, header_size);
 	memcpy(&PE_header.OptionalHeader,
@@ -96,7 +96,7 @@ void PE::Load(const void* pe_data)
 		   PE_header.FileHeader.SizeOfOptionalHeader);
 	mem_it += header_size + PE_header.FileHeader.SizeOfOptionalHeader;
 
-	// Nagłówki sekcji
+	// Section headers
 	if (PE_header.OptionalHeader.NumberOfRvaAndSizes > IMAGE_NUMBEROF_DIRECTORY_ENTRIES)
 		fatal_error("Bad value of field PE.OptionalHeader.NumberOfRvaAndSizes: %d",
 					PE_header.OptionalHeader.NumberOfRvaAndSizes);
@@ -203,7 +203,7 @@ bool PE::IsAddrExecutable(RVA rva) const
 
 void PE::Save(const std::wstring& file_path)
 {
-	// Popraw wskaźniki
+	// Fix pointers
 	MZ_header.e_lfanew = sizeof(MZ_header) + dos_stub_size;
 	PE_header.FileHeader.NumberOfSections = sections_hdrs.size();
 	PE_header.FileHeader.SizeOfOptionalHeader = sizeof(PE_header.OptionalHeader);
@@ -226,7 +226,7 @@ void PE::Save(const std::wstring& file_path)
 							PE_header.OptionalHeader.FileAlignment);
 	}
 
-	// Zbuduj nowy plik PE w pamięci
+	// Build new PE file in memory
 	string res;
 
 	res.append({ (const char*)&MZ_header, sizeof(MZ_header) });
@@ -250,13 +250,13 @@ void PE::Save(const std::wstring& file_path)
 	}
 	delete[] nullmem;
 
-	// Popraw sumę kontrolną
+	// Fix PE checksum
 	auto checksum_ptr = &res[checksum_pos];
 	memset(checksum_ptr, 0, sizeof(DWORD));
 	DWORD new_checksum = Checksum(res);
 	memcpy(checksum_ptr, &new_checksum, sizeof(DWORD));
 
-	// Zapisz do pliku
+	// Write to file
 	ofstream f(file_path, ios::binary);
 	if (f.fail())
 		fatal_error("Cannot open file: %ls", file_path.c_str());

@@ -35,13 +35,13 @@ int wmain(int argc, const wchar_t* argv[])
 
 	PE dll(argv[1]);
 	wstring asm_path = argv[2];
-	// Znajdź wolne RVA dla nowej sekcji
+	// Find free RVA for new section
 	auto free_rva = dll.NextFreeRVA();
 
-	// Wczytaj kod asemblera
+	// Load assembly code
 	string users_source = read_whole_file(asm_path);
 
-	// Przetwórz tablicę eksportów
+	// Parse export table
 	const auto& exports_dir_entry = dll.Directory(IMAGE_DIRECTORY_ENTRY_EXPORT);
 	IMAGE_EXPORT_DIRECTORY export_directory;
 
@@ -55,25 +55,24 @@ int wmain(int argc, const wchar_t* argv[])
 	}
 	else
 	{
-		// Załaduj strukturę IMAGE_EXPORT_DIRECTORY z danych w pamięci
+		// Load IMAGE_EXPORT_DIRECTORY struct from in-memory file data
 		auto rva = RVA{ exports_dir_entry.VirtualAddress };
 		auto section = dll.SectionFromRVA(rva);
 		auto size = sizeof(export_directory);
 		if (section.SizeOfRawData - (rva.val - section.VirtualAddress) < size)
 		{
-			// Tabela eksportów przekracza granicę sekcji lub danych
-			// załadowanych z pliku, dla uproszczenia pomijamy ten przypadek
+			// Export table crosses section boundary or file data,
+			// we're skipping this case for simplicity.
 			fatal_error("Unsupported export table location");
 		}
 		auto export_table_ptr = dll.ConvertTo<PTR>(rva).val;
 		memcpy(&export_directory, export_table_ptr, size);
 	}
 
-	// Znajdź listę adresów eksportowanych symboli
+	// Find array with addresses of exported symbols
 	auto exported_functions = (uint*)dll.ConvertTo<PTR>(RVA{ export_directory.AddressOfFunctions }).val;
 
-	// Wygeneruj kod asemblera zawierający wrappery na eksportowane
-	// funkcje
+	// Generate assembly code containing wrappers for exported functions
 	string generated_prefix = "__tmp_generated";
 	ofstream gen_file(generated_prefix + ".asm", ios::binary);
 	gen_file << "[bits 32]\n";
@@ -82,8 +81,8 @@ int wmain(int argc, const wchar_t* argv[])
 	gen_file << users_source;
 	gen_file << "\n";
 
-	// Dla każdej funkcji wygeneruj wywołanie makra 'redirect'
-	// z odpowiednimi parametrami (jej adres oraz indeks)
+	// Generate `redirect` macro call for every exported function,
+	// passing function address and index as arguments.
 	for (DWORD i = 0; i < export_directory.NumberOfFunctions; i++)
 	{
 		auto func_addr = RVA{ exported_functions[i] };
@@ -92,15 +91,14 @@ int wmain(int argc, const wchar_t* argv[])
 	}
 	gen_file.close();
 
-	// Skompiluj wygenerowany kod przy użyciu asemblera nasm
+	// Compile generated code using nasm
 	auto command = format(R"(nasm "%s.asm" -O0 -o "%s.bin")",
 	                      generated_prefix.c_str(),
 						  generated_prefix.c_str());
-	// Używanie funkcji system() nie jest zalecane, jednak inne metody
-	// niepotrzebnie skomplikowałyby kod
+	// Using system() is generally a bad thing, but it's the simplest solution here.
 	system(command.c_str());
 
-	// Przygotuj nową sekcję i umieść w niej skompilowany kod asemblera
+	// Prepare new section and place compiled assembly in it.
 	string compiled = read_whole_file(generated_prefix + ".bin");
 	dll.AddSection("wrappers",
 	               free_rva,
@@ -108,8 +106,7 @@ int wmain(int argc, const wchar_t* argv[])
 				   compiled,
 				   IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE);
 
-	// Zmień adresy funkcji w tabeli eksportów, tak by wskazywały teraz
-	// na wygenerowane przez nas wstawki
+	// Change function pointers in export table so they point to generated wrappers.
 	map<string, uint> labels = parse_map_file(generated_prefix + ".map");
 	for (int i = 0; i < export_directory.NumberOfFunctions; i++)
 	{
